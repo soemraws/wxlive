@@ -1,0 +1,8 @@
+Some widgets that support live updating from updaters that are wrappers around
+getter and setter functions.
+
+More docs follow.
+
+wxlive.py   :  Defines the wrapper widgets
+updater.py  :  Defines the getter and setter wrappers around callbacks
+graph.py    :  A demonstration of the use of a getter and a live updating graph
