@@ -30,9 +30,9 @@ class LiveWidget(object):
       self._updater_default = self._updater.default
     else:
       if self._column:
-	self._updater_default = (lambda: [None] * (self._column+1))
+        self._updater_default = (lambda: [None] * (self._column+1))
       else:
-	self._updater_default = (lambda: None)
+        self._updater_default = (lambda: None)
 
   def is_setter(self):
     return hasattr(self._updater, 'set_value')
@@ -217,25 +217,25 @@ class PlotGraphics(object):
     for x in self._polys:
       d = x.get_data(self.display_points)
       if self.x_autoscale and len(d) > 0:
-	if xmin > d[0,0]:
-	  xmin = d[0,0]
-	if xmax < d[-1,0]:
-	  xmax = d[-1,0]
+        if xmin > d[0,0]:
+          xmin = d[0,0]
+        if xmax < d[-1,0]:
+          xmax = d[-1,0]
       if isinstance(x, PolyLine):
-	o = wx.lib.plot.PolyLine(d, **x._kwargs)
+        o = wx.lib.plot.PolyLine(d, **x._kwargs)
       elif isinstance(x, PolyMarker):
-	o = wx.lib.plot.PolyMarker(d, **x._kwargs)
+        o = wx.lib.plot.PolyMarker(d, **x._kwargs)
       else:
-	raise TypeError, 'Unexpected type in plot'
+        raise TypeError, 'Unexpected type in plot'
       objects.append(o)
 
     retval = {'graphics': wx.lib.plot.PlotGraphics(objects, **self._kwargs)}
 
     if self.x_autoscale:
       if xmin == 9e99:
-	xmin = 0.0
+        xmin = 0.0
       if xmax == -9e99:
-	xmax = 10.0
+        xmax = 10.0
       retval['xAxis'] = (xmin, xmax)
     if not self.y_autoscale:
       retval['yAxis'] = (self.y_min, self.y_max)

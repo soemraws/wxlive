@@ -52,11 +52,11 @@ class Base(list):
     """
     for w in self:
       try:
-	wx.PostEvent(w,event)
+        wx.PostEvent(w,event)
       except (KeyboardInterrupt, SystemExit):
-	raise
+        raise
       except:
-	self.unregister(w)
+        self.unregister(w)
 
 
 class Setter(Base):
