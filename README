@@ -1,8 +1,36 @@
 Some widgets that support live updating from updaters that are wrappers around
 getter and setter functions.
 
-More docs follow.
-
 wxlive.py   :  Defines the wrapper widgets
 updater.py  :  Defines the getter and setter wrappers around callbacks
 graph.py    :  A demonstration of the use of a getter and a live updating graph
+
+
+The wxlive widgets
+
+A wxlive widget is derived from a wx widget, with the difference that it binds
+certain events to actions. These events synchronise the status of the widget
+with respect to a so-called updater object.
+
+For read-only widgets, such as StaticText, the content or setting of the
+widget will respond to an updater object called a getter. The getter can
+retrieve information from a device, file, or calculation. This is done through
+a user-supplied getter function that takes no arguments but retrieves a value,
+e.g. time.time(). The getter then sends a DATA_READY event to the widget, that
+responds by updating its content. The getter starts its own thread for
+retrieving data, so that interaction with the application is not halted.
+
+For interactive widgets, such as CheckBox, interaction with the checkbox calls
+an updater object, called a setter, to set values in a device, file or some
+arbitrary python object. This is done through a setter function that takes an
+argument, e.g. setting a variable in the instance of some user-defined python
+class through a lambda. The setter function may return a value, that is
+propagated back to the widget, which can then be updated if required.
+
+The updaters thus serve to synchronise some part of your code, such as the
+members and status of an instance, or a remote device, with the widgets on
+your screen, in a (hopefully) transparent way. In fact, each updater can have
+multiple widgets registered to it. This means that the updater will inform
+these multiple widgets of the change in status.
+
+For an example, see the graph.py demo.

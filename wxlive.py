@@ -3,6 +3,7 @@
 import wx
 import updater as p
 import wx.lib.plot
+from numpy import zeros
 
 class LiveWidget(object):
   def __init__(self, widget, updater = None, column = None, **kwargs):
@@ -162,14 +163,12 @@ class RadioButton(wx.RadioButton, LiveWidget):
       self._updater.set_value(self._value)
 
 
-
-
-
-class PolyLine(object):
+class PolyPoints(object):
   def __init__(self, updater = None, columns = (0,1), **kwargs):
     self._updater = updater
     self._columns = columns
     self._kwargs = kwargs
+    self.visible = True
 
   def get_data(self, size=None):
     return self._updater.get_values(size)[0:,self._columns]
@@ -181,22 +180,14 @@ class PolyLine(object):
     self._updater.unregister(widget)
 
 
-
-class PolyMarker(object):
+class PolyLine(PolyPoints):
   def __init__(self, updater = None, columns = (0,1), **kwargs):
-    self._updater = updater
-    self._columns = columns
-    self._kwargs = kwargs
+    PolyPoints.__init__(self, updater, columns, **kwargs)
 
-  def get_data(self, size=None):
-    return self._updater.get_values(size)[0:,self._columns]
 
-  def register(self, widget):
-    self._updater.register(widget)
-
-  def unregister(self, widget):
-    self._updater.unregister(widget)
-
+class PolyMarker(PolyPoints):
+  def __init__(self, updater = None, columns = (0,1), **kwargs):
+    PolyPoints.__init__(self, updater, columns, **kwargs)
 
 
 class PlotGraphics(object):
@@ -215,7 +206,9 @@ class PlotGraphics(object):
     xmin = 9e99
     xmax = -9e99
     for x in self._polys:
-      d = x.get_data(self.display_points)
+      d = zeros((0,2))
+      if x.visible:
+        d = x.get_data(self.display_points)
       if self.x_autoscale and len(d) > 0:
         if xmin > d[0,0]:
           xmin = d[0,0]
@@ -250,13 +243,17 @@ class PlotGraphics(object):
       x.unregister(widget)
 
 class PlotCanvas(wx.lib.plot.PlotCanvas):
-  def __init__(self, graphics = None, **kwargs):
+  def __init__(self, graphics = None, popup=True, **kwargs):
     super(PlotCanvas, self).__init__(**kwargs)
     self._graphics = graphics
     graphics.register(self)
 
     self.Bind(p.EVT_DATA_READY, self.get)
 
+    self._popup_ids = {}
+    self._poly_menu_items = {}
+
+    self.use_popup(popup)
     self.default()
 
   def get(self, event = None):
@@ -264,3 +261,81 @@ class PlotCanvas(wx.lib.plot.PlotCanvas):
 
   def default(self, event = None):
     self.Draw(**(self._graphics.canvas_kwargs()))
+
+  def _get_popup_id(self, key):
+    if not key in self._popup_ids.keys():
+      self._popup_ids[key] = wx.NewId()
+    return self._popup_ids[key]
+
+  def use_popup(self, popup=True):
+    self._popup = popup
+
+  def popup_menu(self):
+    menu = wx.Menu()
+
+    id = self._get_popup_id('Grid')
+    self._item_grid = menu.AppendCheckItem(id, 'Grid')
+    self._item_grid.Check(self.GetEnableGrid())
+    wx.EVT_MENU(menu, id, self._on_grid)
+
+    id = self._get_popup_id('Legend')
+    self._item_legend = menu.AppendCheckItem(id, 'Legend')
+    self._item_legend.Check(self.GetEnableLegend())
+    wx.EVT_MENU(menu, id, self._on_legend)
+
+    menu.AppendSeparator();
+
+    scale = wx.Menu()
+
+    id = self._get_popup_id('Autoscale X-axis')
+    self._item_x_scale = scale.AppendCheckItem(id, 'Autoscale X-axis')
+    self._item_x_scale.Check(self._graphics.x_autoscale)
+    wx.EVT_MENU(scale, id, self._on_x_scale)
+
+    id = self._get_popup_id('Autoscale Y-axis')
+    self._item_y_scale = scale.AppendCheckItem(id, 'Autoscale Y-axis')
+    self._item_y_scale.Check(self._graphics.y_autoscale)
+    wx.EVT_MENU(scale, id, self._on_y_scale)
+
+    menu.AppendMenu(-1, 'Scaling', scale)
+    
+    curves = wx.Menu()
+
+    for x in self._graphics._polys:
+      legend = x._kwargs['legend']
+      id = self._get_popup_id(legend)
+      item = curves.AppendCheckItem(id, legend)
+      item.Check(x.visible)
+      self._poly_menu_items[id] = (x,item)
+      wx.EVT_MENU(curves, id, self._on_poly)
+
+    menu.AppendMenu(-1, 'Curves', curves)
+
+    return menu
+
+  def OnMouseRightDown(self, event):
+    if not self._popup:
+      wx.lib.plot.PlotCanvas.OnMouseRightDown(self, event)
+    else:
+      menu = self.popup_menu()
+      self.PopupMenu(menu, event.GetPosition())
+      menu.Destroy()
+
+  def _on_scale(self, event):
+    pass
+
+  def _on_grid(self, event):
+    self.SetEnableGrid(self._item_grid.IsChecked())
+
+  def _on_legend(self, event):
+    self.SetEnableLegend(self._item_legend.IsChecked())
+
+  def _on_poly(self, event):
+    poly, item = self._poly_menu_items[event.GetId()]
+    poly.visible = item.IsChecked()
+
+  def _on_x_scale(self, event):
+    self._graphics.x_autoscale = self._item_x_scale.IsChecked()
+
+  def _on_y_scale(self, event):
+    self._graphics.y_autoscale = self._item_y_scale.IsChecked()

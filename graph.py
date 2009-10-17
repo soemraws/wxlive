@@ -5,10 +5,8 @@ import updater
 import time
 import math
 
-ID_START = 1
-ID_GRID = 2
-ID_LEGEND = 3
-ID_QUIT = 99
+ID_START  = wx.NewId()
+ID_QUIT   = wx.NewId()
 
 def sine_of_time():
   return math.sin(time.time())
@@ -25,31 +23,34 @@ class MainWindow(wx.Frame):
 
     # The menu
     file = wx.Menu()
+
     self.start_mnu = file.Append(ID_START, 'Start/Stop')
-    file.Append(wx.ID_SEPARATOR)
+
+    file.AppendSeparator()
+
     file.Append(ID_QUIT, '&Quit\tCtrl+Q')
+
     menubar.Append(file, '&File')
-    view = wx.Menu()
-    self.grid_mnu = view.AppendCheckItem(ID_GRID, 'Grid')
-    self.legend_mnu = view.AppendCheckItem(ID_LEGEND, 'Legend')
-    menubar.Append(view, '&View')
+
     self.SetMenuBar(menubar)
 
     self.Bind(wx.EVT_MENU, self.on_startstop, id=ID_START)
     self.Bind(wx.EVT_MENU, self.on_quit, id=ID_QUIT)
-    self.Bind(wx.EVT_MENU, self.on_grid, id=ID_GRID)
-    self.Bind(wx.EVT_MENU, self.on_legend, id=ID_LEGEND)
 
     # The sizer
     vbox = wx.BoxSizer(wx.VERTICAL)
 
     self.timegetter = updater.TimedGetter([cosine_of_time,sine_of_time],
         default = [0.0,0.0], interval = 0.1, history=10000)
+
+    # Column 1 is the return value of sine_of_time.
+    timetxt = wxlive.StaticText(parent = self, id = wx.ID_ANY,
+        updater = self.timegetter, column=1, format='sin(t) = %0.2g')
+
     # You can also use a TextCtrl instead, which in getter mode will not be editable
     #timetxt = wxlive.TextCtrl(parent = self, id = wx.ID_ANY,
     #	updater = self.timegetter, column=1, format='%0.2g')
-    timetxt = wxlive.StaticText(parent = self, id = wx.ID_ANY,
-        updater = self.timegetter, column=1, format='%0.2g')
+
     vbox.Add(timetxt, 0, 0, 10)
 
     polyline = wxlive.PolyLine(self.timegetter, columns=(0,1),
@@ -60,6 +61,9 @@ class MainWindow(wx.Frame):
         yLabel='f(t)', title='Live graph')
     self.plot = wxlive.PlotCanvas(parent = self, id = wx.ID_ANY,
         graphics=graph)
+
+    #menubar.Append(self.plot.popup_menu(), '&View')
+
     vbox.Add(self.plot, 1, wx.EXPAND, 10)
 
     self.SetSizer(vbox)
@@ -78,12 +82,6 @@ class MainWindow(wx.Frame):
 
   def on_quit(self, event):
     self.Close()
-
-  def on_grid(self, event):
-    self.plot.SetEnableGrid(self.grid_mnu.IsChecked())
-
-  def on_legend(self, event):
-    self.plot.SetEnableLegend(self.legend_mnu.IsChecked())
 
   def on_close(self, event):
     self.timegetter.stop()
