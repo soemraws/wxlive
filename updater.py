@@ -110,7 +110,8 @@ class Getter(Base):
       val = self._get()
       evt = DataReadyEvent(value = val)
       self.post_event(evt)
-      time.sleep(self.interval)
+      if self.interval:
+        time.sleep(self.interval)
     self._continue = True
 
   def _get(self):
