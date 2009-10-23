@@ -240,20 +240,18 @@ class TimedGetter(FullGetter):
   '''A TimedGetter is a FullGetter where the first column of the returned
   value array is the time in seconds since the TimedGetter was started.
   Optionally, an offset in seconds can be added.'''
-  def __init__(self, func, default=None, offset=0, **kwargs):
+  def __init__(self, func, default=None, offset=0, columns=None, **kwargs):
     if type(func) is not list: func = [func]
     func.insert(0, self._time)
 
     if type(default) is not list: default = [default]
     default.insert(0, offset)
 
-
+    if columns is not None:
+      columns.insert(0,1)
 
     super(TimedGetter, self).__init__(func=func, default=default,
-	**kwargs)
-
-    if self.columns is not None:
-      self.columns.insert(0,1)
+        columns=columns, **kwargs)
 
     self.offset = offset
     self._t0 = None
