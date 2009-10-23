@@ -174,7 +174,7 @@ class FullGetter(Getter):
   '''A FullGetter is a getter that can get multiple data columns and can
   store them in a history.
   '''
-  def __init__(self, func, history = 10000, **kwargs):
+  def __init__(self, func, columns=None, history = 10000, **kwargs):
     super(FullGetter, self).__init__(func, **kwargs)
 
     if type(self._func) is not list:
@@ -183,9 +183,13 @@ class FullGetter(Getter):
     if type(self._default) is not list:
       self._default = [self._default]
 
-    self._data = numpy.zeros((0, len(self._func)))
+    self._num_columns = (len(self._func) if columns is None else
+        sum(columns))
+
+    self._data = numpy.zeros((0, self._num_columns))
     self._cur = 0
     self._value = None
+
 
     self.history = history
 
@@ -193,6 +197,8 @@ class FullGetter(Getter):
     val = []
     for g in self._func:
       val.append(g())
+    val = reduce(list.__add__,(i if type(i) == list else [i]
+      for i in val))
     if self._cur < self.history:
       self._data = numpy.append(self._data, [val], axis=0)
       self._cur += 1
@@ -209,7 +215,8 @@ class FullGetter(Getter):
     val = []
     for d in t:
       val.append(d() if type(d) is types.FunctionType else d)
-    return val
+    return reduce(list.__add__,(i if type(i) == list else [i]
+      for i in val))
 
   def get_value(self):
     if self.is_active():
@@ -219,7 +226,7 @@ class FullGetter(Getter):
 
   def reset(self):
     super(FullGetter, self).reset()
-    self._data = numpy.zeros((0, len(self._getter)))
+    self._data = numpy.zeros((0, self._num_columns))
     self._cur = 0
 
   def get_values(self, size=None):
