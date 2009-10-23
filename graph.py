@@ -17,6 +17,7 @@ def cosine_of_time():
 class MainWindow(wx.Frame):
   def __init__(self, *args, **kwargs):
     wx.Frame.__init__(self, *args, **kwargs)
+    self.panel = wx.Panel(self)
 
     # The menu
     menubar = wx.MenuBar()
@@ -44,11 +45,11 @@ class MainWindow(wx.Frame):
         default = [0.0,0.0], interval = 0.1, history=10000)
 
     # Column 1 is the return value of sine_of_time.
-    timetxt = wxlive.StaticText(parent = self, id = wx.ID_ANY,
+    timetxt = wxlive.StaticText(parent = self.panel, id = wx.ID_ANY,
         updater = self.timegetter, column=1, format='sin(t) = %0.2g')
 
     # You can also use a TextCtrl instead, which in getter mode will not be editable
-    #timetxt = wxlive.TextCtrl(parent = self, id = wx.ID_ANY,
+    #timetxt = wxlive.TextCtrl(parent = self.panel, id = wx.ID_ANY,
     #	updater = self.timegetter, column=1, format='%0.2g')
 
     vbox.Add(timetxt, 0, 0, 10)
@@ -59,16 +60,16 @@ class MainWindow(wx.Frame):
         legend='cos(t)', colour='blue')
     graph = wxlive.PlotGraphics(polys=[polyline,polymarker], xLabel='Time t [s]',
         yLabel='f(t)', title='Live graph')
-    self.plot = wxlive.PlotCanvas(parent = self, id = wx.ID_ANY,
+    self.plot = wxlive.PlotCanvas(parent = self.panel, id = wx.ID_ANY,
         graphics=graph)
 
     #menubar.Append(self.plot.popup_menu(), '&View')
 
     vbox.Add(self.plot, 1, wx.EXPAND, 10)
 
-    self.SetSizer(vbox)
+    self.panel.SetSizer(vbox)
 
-    self.statusbar = self.CreateStatusBar()
+    self.panel.statusbar = self.CreateStatusBar()
 
     self.Bind(wx.EVT_CLOSE, self.on_close)
 
