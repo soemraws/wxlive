@@ -247,8 +247,13 @@ class TimedGetter(FullGetter):
     if type(default) is not list: default = [default]
     default.insert(0, offset)
 
+
+
     super(TimedGetter, self).__init__(func=func, default=default,
 	**kwargs)
+
+    if self.columns is not None:
+      self.columns.insert(0,1)
 
     self.offset = offset
     self._t0 = None
