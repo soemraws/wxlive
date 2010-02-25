@@ -1,341 +1,331 @@
-#!/usr/bin/env python
-
 import wx
-import updater as p
-import wx.lib.plot
-from numpy import zeros
+import wx.lib.newevent
+import threading
+import time
 
-class LiveWidget(object):
-  def __init__(self, widget, updater = None, column = None, **kwargs):
-    self._updater = None
-    self._column  = column
-    self._updater_default = None
-    self._widget = widget
+# Event sent to widgets, containing the data that they can or may process.
 
-    self._set_updater(updater)
+VariableEvent, EVT_VARIABLE = wx.lib.newevent.NewEvent()
 
+class Variable(object):
+  '''
+  Variable
+  '''
+  def __init__(self, variable_type, value, fget = None, fset = None,
+      interval = 1.0, listeners = None, **kwargs):
+    '''
+    Variable(type, value, fget = None, fset = None,
+      interval = 1.0)
+    '''
+    # Private - for internal use only
+    self.__continue = False
+    self.__thread = None
 
-  def _set_updater(self, updater):
-    if self._updater:
-      self._updater.unregister(self._widget)
+    # Protected - access only through methods
+    self._id = wx.NewId()
+    self._listeners = []
+    self._value = None
+    self._time = None
+    self._time_offset = 0.0
+    self._interval = float(interval)
 
-    self._updater = updater
+    # Public - can be changed on the fly
+    self.type = variable_type
+    self.fget = fget
+    self.fset = fset
 
-    if updater is not None:
-      self._updater.register(self._widget)
-
-    self._set_updater_default()
-
-  def _set_updater_default(self):
-    if self._updater and self.is_getter():
-      self._updater_default = self._updater.default
+    # Add the listeners
+    if type(listeners) is list:
+      for i in listeners:
+        self.add_listener(i)
     else:
-      if self._column:
-        self._updater_default = (lambda: [None] * (self._column+1))
-      else:
-        self._updater_default = (lambda: None)
+      self.add_listener(listeners)
 
-  def is_setter(self):
-    return hasattr(self._updater, 'set_value')
+    # Finally, set the initial value
+    self.set_value(value)
 
-  def is_getter(self):
-    return hasattr(self._updater, 'get_value')
+  def get_id(self):
+    return self._id
+
+  id = property(fget = get_id)
+
+  def get_interval(self):
+    return self._interval
+
+  def set_interval(self, value):
+    if type(value) != float and type(value) != int:
+      raise TypeError('Interval can only be a real number.')
+    self._interval = float(value)
+
+  interval = property(fget = get_interval, fset = set_interval)
+
+  def get_time_offset(self):
+    return self._time_offset
+
+  def set_time_offset(self, value):
+    if type(value) != float and type(value) != int:
+      raise TypeError('Time offset can only be a real number.')
+    self._time_offset = float(value)
+
+  time_offset = property(fget = get_time_offset, fset = set_time_offset)
+
+  def set_value(self, value):
+    '''
+    Set the value of the Variable.
+
+    The value is first coerced to the type of the Variable. If the
+    Variable has a set function defined, through fset, then the value is
+    set using that function. If this function returns something other than
+    None, this reply is emitted as the value of a VariableReplyEvent.
+    After that, a VariableEvent is emitted with the new value of the
+    Variable as its value.
+    '''
+    value = self.type(value)
+    reply = None
+    self._time = time.time() - self.time_offset
+    if self.fset is not None:
+      reply = self.fset(value)
+    self._value = value
+    evt = VariableEvent(time = self._time, value = self._value,
+        reply = reply)
+    evt.SetId(self._id)
+    self.__post_event(evt)
+
+  def get_value(self):
+    '''
+    Retrieve the value of the Variable. The value is updated first, by
+    running update(), before returning, unless automatic updating is active
+    (started using the start() method).
+    '''
+    if not self.is_active():
+      self.update()
+    return self._value
+
+  def get_time_value_pair(self):
+    '''
+    Use get_value to obtain the current value of the LiveParameter, but return
+    it as the second item in a tuple. The first item is the time (minus the
+    time_offset) at which this value was updated.
+    '''
+    if not self.is_active():
+      self.update()
+    return (self._time, self._value)
+
+  value = property(fget = get_value, fset = set_value,
+      doc = 'The value of the Variable.')
+
+  def update(self):
+    '''
+    Update the value of the Variable by running the get function and
+    posting the VariableEvent, but without returning the value.
+
+    Note that the value is updated even if automatic updating is already
+    active.
+    '''
+    if self.fget is not None:
+      value = self.type(self.fget())
+      if value != self._value:
+        self._time = time.time() - self.time_offset
+        self._value = value
+        evt = VariableEvent(time = self._time, value = self._value,
+            reply = None)
+        evt.SetId(self._id)
+        self.__post_event(evt)
+
+  def add_listener(self, listener):
+    '''
+    add_listener(listener)
+
+    Adds a widget as a listener. The widget's on_live_variable_event will be
+    bound to receive the wxlive.VariableEvent for this wxlive.Variable.
+
+    If the widget does not have such an attribute, the event will not be
+    bound, but the wxlive.Variable will still attempt to send events to the
+    widget. Thus the programmer can Bind() to receive the
+    wxlive.VariableEvent, as long as he Unbind()'s when required as well.
+    '''
+    if listener is not None:
+      fchange = getattr(listener, 'on_live_variable_event', None)
+
+      if fchange is not None:
+        listener.Bind(EVT_VARIABLE, fchange, id = self._id)
+
+      self._listeners.append(listener)
+
+  def remove_listener(self, listener):
+    '''
+    remove_listener(listener)
+
+    Removes a widget as a listener. The widget's on_live_variable_event will
+    be unbound to recieve the wxlive.VariableEvent for this wxlive.Variable.
+    Simply put, this method does the inverted of what add_listener() does, and
+    the wxlive.Variable ceases to send wxlive.VariableEvent's to the widget.
+    '''
+    if listener is not None:
+      fchange = getattr(listener, 'on_live_variable_event', None)
+
+      if fchange is not None:
+        listener.Unbind(EVT_VARIABLE, fchange, id = self._id)
+
+      self._listeners.remove(listener)
+
+  def start(self, interval = None):
+    '''
+    start(interval = None)
+
+    Start automatic updating of the wxlive.Variable's value. The update()
+    function is called with the given interval. The interval can be changed by
+    setting the interval attribute of the wxlive.Variable.
+    '''
+    if interval is not None:
+      self.interval = interval
+
+    if not self.is_active():
+      self.__continue = True
+      self.__thread = threading.Thread(target=self.__run)
+      self.__thread.start()
+
+  def stop(self):
+    '''
+    stop()
+
+    Stop automatic updating of the Variable's value.
+    '''
+    if self.__thread:
+      self.__continue = False
+      self.__thread.join()
+      self.__thread = None
+
+  def is_active(self):
+    '''
+    is_active()
+
+    Returns True if automatic updating for this Variable has been started.
+    '''
+    return self.__thread is not None
+
+  def reset_time_offset(self, value = None):
+    '''
+    reset_time_offset(value = None)
+
+    Reset the time offset kept internally. By default, the current time (i.e.
+    as returned by time.time()) is used.
+    '''
+    if value is None:
+      self.time_offset = time.time()
+    else:
+      self.time_offset = value
+
+  def __post_event(self, event):
+    for w in self._listeners:
+      try:
+        wx.PostEvent(w, event)
+      except (KeyboardInterrupt, SystemExit):
+        raise
+      except:
+        self._listeners.remove(w)
+
+  def __run(self):
+    while self.__continue:
+      self.update()
+      if self._interval:
+        time.sleep(self._interval)
+    self.__thread = None
+
+  def __eq__(self, other):
+    return self.value == other
+
+  def __ne__(self, other):
+    return self.value != other
+
+  def __lt__(self, other):
+    return self.value < other
+
+  def __le__(self, other):
+    return self.value <= other
+
+  def __gt__(self, other):
+    return self.value > other
+
+  def __ge__(self, other):
+    return self.value >= other
+
+  def __float__(self):
+    return float(self.value)
+
+  def __str__(self):
+    return str(self.value)
 
   def __del__(self):
-    del(self._updater)
-
-  updater = property(fset=_set_updater)
-
-
-class StaticText(wx.StaticText, LiveWidget):
-  def __init__(self, updater = None, format = '%s', column = None, **kwargs):
-    """
-    StaticText(updater, format = '%s', column = None, **kwargs) -> wx.StaticText
-    updater  -- The updater (updating getter)
-    format   -- The format to use to convert the value of the getter into text
-    column   -- If the getter returns an array, use only the specified column
-    **kwargs -- Keyword arguments for a wx.StaticText
-    """
-
-    wx.StaticText.__init__(self,**kwargs)
-    LiveWidget.__init__(self, widget=self, updater=updater, column=column, **kwargs)
-
-    self._format = format
-
-    self.Bind(p.EVT_DATA_READY, self.get)
-
-    if self._updater is not None:
-      self.default()
-
-  def get(self, event):
-    if self._column == None:
-      self.SetLabel(self._format % event.value)
-    else:
-      self.SetLabel(self._format % event.value[self._column])
-
-  def default(self, event = None):
-    if self._column == None:
-      self.SetLabel(self._format % self._updater_default())
-    else:
-      self.SetLabel(self._format % self._updater_default()[self._column])
-
-
-
-
-
-class TextCtrl(wx.TextCtrl, LiveWidget):
-  def __init__(self, updater = None, format = '%s', column = None, **kwargs):
-    wx.TextCtrl.__init__(self, **kwargs)
-    LiveWidget.__init__(self, widget=self, updater=updater, column=column, **kwargs)
-
-    self._format = format
-
-    if self.is_setter():
-      self.Bind(wx.EVT_COMMAND_TEXT_ENTER, self.set)
-    else:
-      self.SetEditable(False)
-      self.Bind(p.EVT_DATA_READY, self.get)
-
-    if self._updater is not None:
-      self.default()
-
-  def get(self, event):
-    if self._column:
-      self.SetValue(self._format % event.value[self._column])
-    else:
-      self.SetValue(self._format % event.value)
-
-  def default(self, event = None):
-    if self._column == None:
-      self.SetValue(self._format % self._updater_default())
-    else:
-      self.SetValue(self._format % self._updater_default()[self._column])
-
-  def set(self, event = None):
-    self._updater.set_value(self.GetValue())
-
-
-
-
-
-
-class Choice(wx.Choice, LiveWidget):
-  def __init__(self, updater = None, mapping = None, **kwargs):
-    wx.Choice.__init__(self,**kwargs)
-    LiveWidget.__init__(self, widget=self, updater=updater, **kwargs)
-
-    if not mapping:
-      self._mapping = range(len(kwargs['choices']))
-    else:
-      self._mapping = mapping
-
-    wx.EVT_CHOICE(self, wx.ID_ANY, self.set)
-
-  def set(self, event = None):
-    self._updater.set_value(self._mapping[self.GetSelection()])
-
-
-
-
-class CheckBox(wx.CheckBox, LiveWidget):
-  def __init__(self, updater = None, **kwargs):
-    wx.CheckBox.__init__(self, **kwargs)
-    LiveWidget.__init__(self, widget=self, updater=updater, **kwargs)
-
-    wx.EVT_CHECKBOX(self, wx.ID_ANY, self.set)
-
-  def set(self, event = None):
-    self._updater.set_value(self.GetValue())
-
-
-
-
-class RadioButton(wx.RadioButton, LiveWidget):
-  def __init__(self, updater = None, value = None, **kwargs):
-    wx.RadioButton.__init__(self, **kwargs)
-    LiveWidget.__init__(self, widget=self, updater=updater, **kwargs)
-    self._value = value
-
-    wx.EVT_RADIOBUTTON(self, wx.ID_ANY, self.set)
-
-  def set(self, event = None):
-    if self.GetValue():
-      self._updater.set_value(self._value)
-
-
-class PolyPoints(object):
-  def __init__(self, updater = None, columns = (0,1), **kwargs):
-    self._updater = updater
-    self._columns = columns
-    self._kwargs = kwargs
-    self.visible = True
-
-  def get_data(self, size=None):
-    return self._updater.get_values(size)[0:,self._columns]
-
-  def register(self, widget):
-    self._updater.register(widget)
-
-  def unregister(self, widget):
-    self._updater.unregister(widget)
-
-
-class PolyLine(PolyPoints):
-  def __init__(self, updater = None, columns = (0,1), **kwargs):
-    PolyPoints.__init__(self, updater, columns, **kwargs)
-
-
-class PolyMarker(PolyPoints):
-  def __init__(self, updater = None, columns = (0,1), **kwargs):
-    PolyPoints.__init__(self, updater, columns, **kwargs)
-
-
-class PlotGraphics(object):
-  def __init__(self, polys = [], display_points = 100, **kwargs):
-    self._polys = polys
-    self._kwargs = kwargs
-    self.display_points = display_points
-
-    self.x_autoscale = True
-    self.y_autoscale = True
-    self.y_min = 0
-    self.y_max = 10.0
-
-  def canvas_kwargs(self):
-    objects = []
-    xmin = 9e99
-    xmax = -9e99
-    for x in self._polys:
-      d = zeros((0,2))
-      if x.visible:
-        d = x.get_data(self.display_points)
-      if self.x_autoscale and len(d) > 0:
-        if xmin > d[0,0]:
-          xmin = d[0,0]
-        if xmax < d[-1,0]:
-          xmax = d[-1,0]
-      if isinstance(x, PolyLine):
-        o = wx.lib.plot.PolyLine(d, **x._kwargs)
-      elif isinstance(x, PolyMarker):
-        o = wx.lib.plot.PolyMarker(d, **x._kwargs)
-      else:
-        raise TypeError, 'Unexpected type in plot'
-      objects.append(o)
-
-    retval = {'graphics': wx.lib.plot.PlotGraphics(objects, **self._kwargs)}
-
-    if self.x_autoscale:
-      if xmin == 9e99:
-        xmin = 0.0
-      if xmax == -9e99:
-        xmax = 10.0
-      retval['xAxis'] = (xmin, xmax)
-    if not self.y_autoscale:
-      retval['yAxis'] = (self.y_min, self.y_max)
-    return retval
-
-  def register(self, widget):
-    for x in self._polys:
-      x.register(widget)
-
-  def unregister(self, widget):
-    for x in self._polys:
-      x.unregister(widget)
-
-class PlotCanvas(wx.lib.plot.PlotCanvas):
-  def __init__(self, graphics = None, popup=True, **kwargs):
-    super(PlotCanvas, self).__init__(**kwargs)
-    self._graphics = graphics
-    graphics.register(self)
-
-    self.Bind(p.EVT_DATA_READY, self.get)
-
-    self._popup_ids = {}
-    self._poly_menu_items = {}
-
-    self.use_popup(popup)
-    self.default()
-
-  def get(self, event = None):
-    self.Draw(**(self._graphics.canvas_kwargs()))
-
-  def default(self, event = None):
-    self.Draw(**(self._graphics.canvas_kwargs()))
-
-  def _get_popup_id(self, key):
-    if not key in self._popup_ids.keys():
-      self._popup_ids[key] = wx.NewId()
-    return self._popup_ids[key]
-
-  def use_popup(self, popup=True):
-    self._popup = popup
-
-  def popup_menu(self):
-    menu = wx.Menu()
-
-    id = self._get_popup_id('Grid')
-    self._item_grid = menu.AppendCheckItem(id, 'Grid')
-    self._item_grid.Check(self.GetEnableGrid())
-    wx.EVT_MENU(menu, id, self._on_grid)
-
-    id = self._get_popup_id('Legend')
-    self._item_legend = menu.AppendCheckItem(id, 'Legend')
-    self._item_legend.Check(self.GetEnableLegend())
-    wx.EVT_MENU(menu, id, self._on_legend)
-
-    menu.AppendSeparator();
-
-    scale = wx.Menu()
-
-    id = self._get_popup_id('Autoscale X-axis')
-    self._item_x_scale = scale.AppendCheckItem(id, 'Autoscale X-axis')
-    self._item_x_scale.Check(self._graphics.x_autoscale)
-    wx.EVT_MENU(scale, id, self._on_x_scale)
-
-    id = self._get_popup_id('Autoscale Y-axis')
-    self._item_y_scale = scale.AppendCheckItem(id, 'Autoscale Y-axis')
-    self._item_y_scale.Check(self._graphics.y_autoscale)
-    wx.EVT_MENU(scale, id, self._on_y_scale)
-
-    menu.AppendMenu(-1, 'Scaling', scale)
-    
-    curves = wx.Menu()
-
-    for x in self._graphics._polys:
-      legend = x._kwargs['legend']
-      id = self._get_popup_id(legend)
-      item = curves.AppendCheckItem(id, legend)
-      item.Check(x.visible)
-      self._poly_menu_items[id] = (x,item)
-      wx.EVT_MENU(curves, id, self._on_poly)
-
-    menu.AppendMenu(-1, 'Curves', curves)
-
-    return menu
-
-  def OnMouseRightDown(self, event):
-    if not self._popup:
-      wx.lib.plot.PlotCanvas.OnMouseRightDown(self, event)
-    else:
-      menu = self.popup_menu()
-      self.PopupMenu(menu, event.GetPosition())
-      menu.Destroy()
-
-  def _on_scale(self, event):
-    pass
-
-  def _on_grid(self, event):
-    self.SetEnableGrid(self._item_grid.IsChecked())
-
-  def _on_legend(self, event):
-    self.SetEnableLegend(self._item_legend.IsChecked())
-
-  def _on_poly(self, event):
-    poly, item = self._poly_menu_items[event.GetId()]
-    poly.visible = item.IsChecked()
-
-  def _on_x_scale(self, event):
-    self._graphics.x_autoscale = self._item_x_scale.IsChecked()
-
-  def _on_y_scale(self, event):
-    self._graphics.y_autoscale = self._item_y_scale.IsChecked()
+    self.stop()
+
+  # wx insanity aliases
+  GetId = get_id
+  Id = id
+  GetValue = get_value
+  GetTimeValuePair = get_time_value_pair
+  SetValue = set_value
+  Value = value
+  GetInterval = get_interval
+  SetInterval = set_interval
+  Interval = interval
+  GetTimeOffset = get_time_offset
+  SetTimeOffset = set_time_offset
+  ResetTimeOffset = reset_time_offset
+  TimeOffset = time_offset
+  AddListener = add_listener
+  RemoveListener = remove_listener
+  Update = update
+  Start = start
+  Stop = stop
+  IsActive = is_active
+
+
+#### Functions
+
+def make_listener(widget, live_variable_event_handler):
+  '''
+  make_listener(widget, live_variable_event_handler)
+
+  Make any wx widget a listener widget, by setting an event handler for
+  a wxlive.VariableEvent. The handler must receive one argument, the
+  wxlive.VariableEvent. The handler will be set as an attribute
+  on_live_variable_event to the widget, thereby duck typing it as a listener.
+
+  The wxlive.VariableEvent has the following members that might be of
+  interest:
+
+  value     The recently updated value of the wxlive.Variable.
+  time      The time when the wxlive.Variable was updated. This is the number
+            of seconds since the epoch, minus the time offset of the
+            wxlive.Variable.
+  reply     The return value of the set function that the wxlive.Variable
+            received in order to update the value.
+  '''
+  widget.on_live_variable_event = live_variable_event_handler
+
+
+#### Widgets
+
+class StaticText(wx.StaticText):
+  def __init__(self, *args, **kwargs):
+    format = '%s'
+    if kwargs.has_key('format'):
+      format = kwargs['format']
+      del kwargs['format']
+    wx.StaticText.__init__(self, *args, **kwargs)
+    self.format = format
+    self.on_live_variable_event = lambda x: self.SetLabel(self.format % x.value)
+
+class TextCtrl(wx.TextCtrl):
+  def __init__(self, *args, **kwargs):
+    format = '%s'
+
+    if kwargs.has_key('format'):
+      format = kwargs['format']
+      del kwargs['format']
+
+    wx.TextCtrl.__init__(self, *args, **kwargs)
+
+    self.format = format
+    self.on_live_variable_event = lambda x: self.ChangeValue(self.format % x.value)
