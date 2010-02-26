@@ -92,7 +92,7 @@ class Variable(object):
   the function provided through the fget keyword.
   '''
   def __init__(self, variable_type, value, fget = None, fset = None,
-      interval = 1.0, listeners = None, **kwargs):
+      interval = 1.0, listeners = None, reply_is_new_value = False, **kwargs):
     '''
     wxlive.Variable(type, value, fget = None, fset = None,
       interval = 1.0, listeners = None)
@@ -123,6 +123,7 @@ class Variable(object):
     # Private - for internal use only
     self.__continue = False
     self.__thread = None
+    self.__reply_is_new_value = reply_is_new_value
 
     # Protected - access only through methods
     self._id = wx.NewId()
@@ -214,7 +215,10 @@ class Variable(object):
       self._reply = self.fset(value)
     else:
       self._reply = None
-    self._value = value
+    if self._reply and self.__reply_is_new_value:
+      self._value = self.type(self._reply)
+    else:
+      self._value = value
     self.__post_update_event()
 
   def get_value(self, force = False):
