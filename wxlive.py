@@ -9,93 +9,19 @@ VariableEvent, EVT_VARIABLE = wx.lib.newevent.NewEvent()
 
 class Variable(object):
   '''
-  A wxlive.Variable allows for wx widgets that are listening to the variable,
-  to update their state when the wxlive.Variable's value changes, by sending
-  events.
+  A wxlive.Variable can send events to wx widgets that are listening, to
+  inform them of a change in value. This allows the wx widgets to update their
+  status according to the new value.
 
-  Simple usage
-  ------------
-
-  The value is set with the method set_value, or assigning to its value
-  property:
-
-    >>> var = wxlive.Variable(int, 5)
-    >>> var.value
-    5
-    >>> var.value = 6
-    >>> var.value
-    6
-
-  We can also define a set function:
-
-    >>> def print_new_value(x):
-    ...   print 'Value set to %d' % x
-    ...
-    >>> var = wxlive.Variable(int, 5, fset = print_new_value)
-    Value set to 5
-    >>> var.value = 6
-    Value set to 6
-
-  The value is retrieved with the method get_value, or querying its value
-  property, as shown before. Similar to the set function, we can also define a
-  get function:
-
-    >>> import time
-    >>> var = wxlive.Variable(float, time.time(), fget = time.time)
-    >>> a = var.value ; time.sleep(2) ; b = var.value ; a == b
-    False
-
-  In the above example, it can be seen that retrieving the value of the
-  wxlive.Variable will first update the value and then return that.
-
-  This becomes more interesting, if e.g. the fset function is
-  laser.set_frequency and the fget function is laser.get_frequency, where
-  these functions set and return the current frequency of a laser system. If
-  the laser is drifting a bit, it doesn't matter, since every time you
-  evaluate the value of the wxlive.Variable, you actually get the most
-  up-to-date frequency.
-
-  It becomes more interesting, if you also have a wx.StaticText that displays
-  the current frequency:
-
-    >>> var = wxlive.Variable(float, laser.get_frequency(),
-    ...   fget = laser.get_frequency, fset = laser.set_frequency)
-    >>> frequency_display = wx.StaticText(parent, wx.ID_ANY)
-    >>> make_listener(frequency_display, update_text)
-    >>> var.add_listener(frequency_display)
-
-  Now if the function update_text is defined as follows:
-
-    >>> def update_text(event):
-    ...   frequency_display.SetLabel('Current frequency: %f' % event.value)
-
-  then the display will automatically be updated whenever the value of the
-  wxlive.Variable is changed, either by assigning to it, or whenever it is
-  evaluated.
-
-  Updating the value automatically
-  --------------------------------
-
-  Each wxlive.Variable can actually update itself automatically, by running
-  the get function (given with the keyword argument fget) in a thread. This
-  can simply be done by using the start method, optionally with an interval
-  which is 1.0 seconds by default.
-
-  If a wxlive.Variable is automatically being updated (the thread has been
-  started), the is_active method will return True. Each evaluation of the
-  value will _not_ update the value, but instead just return the value as it
-  was updated last by the thread. To force an update anyway even though
-  automatic updating is active, use the get_value method with force=True.
-
-  Automatic updating can be stopped using the stop method. The original
-  behaviour is restored and every evaluation will update the value by running
-  the function provided through the fget keyword.
+  The wxlive.Variable will send VariableEvents to wx widgets that are modified
+  to become listeners (see make_listener), and are listening to this
+  wxlive.Variable via the add_listener method.
   '''
   def __init__(self, variable_type, value, fget = None, fset = None,
       interval = 1.0, listeners = None, reply_is_new_value = False, **kwargs):
     '''
-    wxlive.Variable(type, value, fget = None, fset = None,
-      interval = 1.0, listeners = None)
+    wxlive.Variable(variable_type, value, fget = None, fset = None,
+      interval = 1.0, listeners = None, reply_is_new_value = False)
 
     Instantiate a wxlive.Variable of the given type, with the given value.
 
@@ -119,6 +45,8 @@ class Variable(object):
     listeners      A single listener or a list of listeners. If this is not
                    None, the listeners will already be informed of the
                    wxlive.Variable's value upon its instantiation.
+    reply_is_new_value  Indicates that the reply of the set function is in
+                        fact the new value for the variable.
     '''
     # Private - for internal use only
     self.__continue = False
@@ -153,6 +81,12 @@ class Variable(object):
       self.set_value(value)
 
   def get_id(self):
+    '''
+    get_id()
+
+    Return the id for this wxlive.Variable. Each event that is sent by this
+    wxlive.Variable will have this id set.
+    '''
     return self._id
 
   id = property(fget = get_id, doc = 'The id of this wxlive.Variable.')
@@ -171,10 +105,8 @@ class Variable(object):
 
     Set the interval at which to do automatic updating.
 
-    The value must be an int or a float.
+    The value must be of a type that is or can be coerced to a float.
     '''
-    if type(value) != float and type(value) != int:
-      raise TypeError('Interval can only be a real number.')
     self._interval = float(value)
 
   interval = property(fget = get_interval, fset = set_interval,
@@ -230,6 +162,14 @@ class Variable(object):
     if not self.is_active() or force:
       self.update()
     return self._value
+
+  def get_time(self):
+    '''
+    Retrieve the time of the last Variable update.
+    '''
+    return self._time
+
+  time = property(fget = get_time)
 
   def get_time_value_pair(self):
     '''
@@ -303,10 +243,7 @@ class Variable(object):
     the wxlive.Variable ceases to send wxlive.VariableEvent's to the widget.
     '''
     if listener is not None:
-      fchange = getattr(listener, 'on_live_variable_event', None)
-
-      if fchange is not None:
-        listener.Unbind(EVT_VARIABLE, fchange, id = self._id)
+      listener.Unbind(EVT_VARIABLE, listener, id = self._id)
 
       self._listeners.remove(listener)
 
@@ -374,8 +311,8 @@ class Variable(object):
       self.update()
       if self._interval:
         time.sleep(self._interval)
-    self.__thread = None
 
+  ## For comparisons
   def __eq__(self, other):
     return self.value == other
 
@@ -397,34 +334,116 @@ class Variable(object):
   def __float__(self):
     return float(self.value)
 
+  def __int__(self):
+    return int(self.value)
+
   def __str__(self):
     return str(self.value)
 
   def __del__(self):
     self.stop()
 
-  # wx insanity aliases
-  GetId = get_id
-  Id = id
-  GetValue = get_value
-  GetTimeValuePair = get_time_value_pair
-  SetValue = set_value
-  Value = value
-  GetReply = get_reply
-  Reply = reply
-  GetInterval = get_interval
-  SetInterval = set_interval
-  Interval = interval
-  GetTimeOffset = get_time_offset
-  SetTimeOffset = set_time_offset
-  ResetTimeOffset = reset_time_offset
-  TimeOffset = time_offset
-  AddListener = add_listener
-  RemoveListener = remove_listener
-  Update = update
-  Start = start
-  Stop = stop
-  IsActive = is_active
+
+class VariableList(list):
+  '''
+  A list that contains wxlive.Variables and the possibility of running an
+  update thread. This allows (near-)synchronisation of updating of multiple
+  wxlive.Variables. Thus instead of start()-ing each wxlive.Variable
+  separately, one can add all to a wxlive.VariableList, and start() the list.
+
+  A wxlive.VariableList has an attribute called interval, which indicates the
+  interval in seconds at which to update the wxlive.Variables. This attribute
+  can be changed at any given time.
+
+  CAVEAT: Once a wxlive.Variable is added to a wxlive.VariableList, it can
+  still be updated separately, or even start()-ed on its own. This is not
+  intended, but there is no explicit check to verify this.
+  '''
+  def __init__(self, interval = 1.0, *args, **kwargs):
+    '''
+    wxlive.VariableList(interval = 1.0)
+
+    Construct a wxlive.VariableList with an updating interval in seconds
+    (default: 1.0). Updating is not started yet.
+    '''
+    super(VariableList, self).__init__(*args, **kwargs)
+    self.__thread = None
+    self.__continue = False
+    self.interval = interval
+
+  def append(self, item):
+    '''
+    append(item)
+
+    Append an item, which must be an instance of a wxlive.Variable to the
+    list. If the item was active (i.e. had been start()-ed) it will be
+    stopped.
+    '''
+    if not isinstance(item, Variable):
+      raise TypeError('Item must be instance of wxlive.Variable.')
+    item.stop()
+    super(VariableList, self).append(item)
+
+  def prepend(self, item):
+    '''
+    prepend(item)
+
+    Prepend an item, which must be an instance of a wxlive.Variable to the
+    list. If the item was active (i.e. had been start()-ed) it will be
+    stopped.
+    '''
+    if not isinstance(item, Variable):
+      raise TypeError('Item must be instance of wxlive.Variable.')
+    item.stop()
+    super(VariableList, self).prepend(item)
+
+  def start(self, interval = None):
+    '''
+    start(interval = None)
+
+    Start updating of the wxlive.Variables in the wxlive.VariableList. If no
+    interval in seconds is given, the interval attribute of the
+    wxlive.VariableList is used.
+
+    If the wxlive.VariableList was already start()-ed, this function does
+    nothing else than potentially change the updating interval.
+    '''
+    if interval is not None:
+      self.interval = float(interval)
+
+    if not self.is_active():
+      self.__continue = True
+      self.__thread = threading.Thread(target=self.__run)
+      self.__thread.start()
+
+  def stop(self):
+    '''
+    stop()
+
+    Stop updating the wxlive.Variables in the wxlive.VariableList.
+    '''
+    if self.__thread:
+      self.__continue = False
+      self.__thread.join()
+      self.__thread = None
+
+  def is_active(self):
+    '''
+    is_active()
+
+    Predicate to see if the wxlive.VariableList() interval is start()-ed.
+    '''
+    return self.__thread is not None
+
+  def __run(self):
+    while self.__continue:
+      for i in self:
+        i.update()
+      if self._interval:
+        time.sleep(self._interval)
+
+  def __del__(self):
+    self.stop()
 
 
 #### Functions
@@ -450,31 +469,4 @@ def make_listener(widget, live_variable_event_handler):
   '''
   widget.on_live_variable_event = live_variable_event_handler
 
-
-#### Widgets
-
-class StaticText(wx.StaticText):
-  def __init__(self, *args, **kwargs):
-    format = '%s'
-
-    if kwargs.has_key('format'):
-      format = kwargs['format']
-      del kwargs['format']
-
-    wx.StaticText.__init__(self, *args, **kwargs)
-
-    self.format = format
-    self.on_live_variable_event = lambda x: self.SetLabel(self.format % x.value)
-
-class TextCtrl(wx.TextCtrl):
-  def __init__(self, *args, **kwargs):
-    format = '%s'
-
-    if kwargs.has_key('format'):
-      format = kwargs['format']
-      del kwargs['format']
-
-    wx.TextCtrl.__init__(self, *args, **kwargs)
-
-    self.format = format
-    self.on_live_variable_event = lambda x: self.ChangeValue(self.format % x.value)
+# vim: set shiftwidth=2 softtabstop=2 tabstop=8 expandtab: 
