@@ -1,11 +1,11 @@
 import wx
-import wx.lib.newevent
+from wx.lib.newevent import NewEvent
 import threading
 import time
 
 # Event sent to widgets, containing the data that they can or may process.
 
-VariableEvent, EVT_VARIABLE = wx.lib.newevent.NewEvent()
+VariableEvent, EVT_VARIABLE = NewEvent()
 
 class Variable(object):
   '''
@@ -369,7 +369,28 @@ class VariableList(list):
     super(VariableList, self).__init__(*args, **kwargs)
     self.__thread = None
     self.__continue = False
-    self.interval = interval
+    self._interval = float(interval)
+
+  def get_interval(self):
+    '''
+    get_interval()
+
+    Return the currently set interval at wich to do automatic updating.
+    '''
+    return self._interval
+
+  def set_interval(self, value):
+    '''
+    set_interval(value)
+
+    Set the interval at which to do automatic updating.
+
+    The value must be of a type that is or can be coerced to a float.
+    '''
+    self._interval = float(value)
+
+  interval = property(fget = get_interval, fset = set_interval,
+      doc = 'The interval at which to do automatic updating.')
 
   def append(self, item):
     '''
@@ -457,6 +478,8 @@ def make_listener(widget, live_variable_event_handler):
   wxlive.VariableEvent. The handler will be set as an attribute
   on_live_variable_event to the widget, thereby duck typing it as a listener.
 
+  Aside from the fact that the wxlive.VariableEvent has the id, as returned by
+  the member function GetId(), of the wxlive.Variable that caused the event,
   The wxlive.VariableEvent has the following members that might be of
   interest:
 
@@ -470,3 +493,4 @@ def make_listener(widget, live_variable_event_handler):
   widget.on_live_variable_event = live_variable_event_handler
 
 # vim: set shiftwidth=2 softtabstop=2 tabstop=8 expandtab: 
+

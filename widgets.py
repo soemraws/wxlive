@@ -27,3 +27,4 @@ class TextCtrl(wx.TextCtrl):
     self.on_live_variable_event = lambda x: self.ChangeValue(self.format % x.value)
 
 # vim: set shiftwidth=2 softtabstop=2 tabstop=8 expandtab: 
+
