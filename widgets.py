@@ -36,6 +36,11 @@ class TextEntry(TextCtrl):
     else:
       self._convert_from = lambda x: x
 
+#    if kwargs.has_key('style'):
+#      kwargs['style'] = kwargs['style'] | wx.TE_PROCESS_ENTER
+#    else:
+#      kwargs['style'] = wx.TE_PROCESS_ENTER
+
     TextCtrl.__init__(self, *args, **kwargs)
 
     self._variable = None
@@ -54,9 +59,38 @@ class TextEntry(TextCtrl):
     self.SetBackgroundColour(wx.NamedColor('PINK'))
 
   def on_press_enter(self, event):
-    self._variable.value = self._convert_from(self.GetValue())
+    self._variable.set_value(self._convert_from(self.GetValue()), self)
     self.SetBackgroundColour(wx.NamedColor('WHITE'))
 
+
+class Slider(wx.Slider):
+  def __init__(self, *args, **kwargs):
+    if kwargs.has_key('convert_from'):
+      self._convert_from = kwargs['convert_from']
+      del kwargs['convert_from']
+    else:
+      self._convert_from = lambda x: x
+    if kwargs.has_key('convert_to'):
+      self._convert_from = kwargs['convert_to']
+      del kwargs['convert_to']
+    else:
+      self._convert_from = lambda x: x
+
+    wx.Slider.__init__(self, *args, **kwargs)
+      
+  def set_variable(self, variable):
+    self._variable = variable
+
+    if self._variable is None:
+      self.Unbind(wx.EVT_SCROLL, self)
+    else:
+      self.Bind(wx.EVT_SCROLL, self.on_scroll)
+      
+  def on_live_variable_event(self, evt):
+    self.SetValue(self._convert_to(evt.value))
+
+  def on_scroll(self, evt):
+    self._variable.set_value(self._convert_from(self.GetValue()), self)
 
 class ToggleButton(wx.ToggleButton):
   def __init__(self, *args, **kwargs):

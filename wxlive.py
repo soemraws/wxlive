@@ -204,9 +204,9 @@ class Variable(object):
 
   time_offset = property(fget = get_time_offset, fset = set_time_offset)
 
-  def set_value(self, value):
+  def set_value(self, value, skip_listener=None):
     '''
-    set_value(value)
+    set_value(value, skip_listener)
 
     Set the value of the Variable.
 
@@ -216,6 +216,10 @@ class Variable(object):
     None, this reply is emitted as the value of a VariableReplyEvent.
     After that, a VariableEvent is emitted with the new value of the
     Variable as its value.
+
+    Optionally, skip_listener can be set to a listener that won't be
+    notified of the update.  This is used internally for widgets that
+    both serve as a listener and update the Variable.
     '''
     value = self.type(value)
     self._time = time() - self.time_offset
@@ -227,7 +231,7 @@ class Variable(object):
       self._value = self.type(self._reply)
     else:
       self._value = value
-    self.__post_update_event()
+    self.__post_update_event(skip_listener)
 
   def get_value(self, force = False):
     '''
@@ -380,11 +384,13 @@ class Variable(object):
       value = 'now'
     self.set_time_offset(value)
 
-  def __post_update_event(self):
+  def __post_update_event(self, skip_listener = None):
     evt = VariableEvent(time = self._time, value = self._value,
         reply = self._reply)
     evt.SetId(self._id)
     for w in self._listeners:
+      if w == skip_listener
+      continue
       try:
         wx.PostEvent(w, evt)
       except (KeyboardInterrupt, SystemExit):
