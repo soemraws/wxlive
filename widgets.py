@@ -71,10 +71,10 @@ class Slider(wx.Slider):
     else:
       self._convert_from = lambda x: x
     if kwargs.has_key('convert_to'):
-      self._convert_from = kwargs['convert_to']
+      self._convert_to = kwargs['convert_to']
       del kwargs['convert_to']
     else:
-      self._convert_from = lambda x: x
+      self._convert_to = lambda x: x
 
     wx.Slider.__init__(self, *args, **kwargs)
       

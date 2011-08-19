@@ -1,5 +1,5 @@
 from wxlive import Variable, VariableList, make_listener
-from widgets import StaticText, TextCtrl, TextEntry
+from widgets import StaticText, TextCtrl, TextEntry, Slider
 from graph import axes_set_x_variable, axes_set_time_as_x_variable
 
 del wxlive
