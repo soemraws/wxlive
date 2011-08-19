@@ -36,10 +36,10 @@ class TextEntry(TextCtrl):
     else:
       self._convert_from = lambda x: x
 
-#    if kwargs.has_key('style'):
-#      kwargs['style'] = kwargs['style'] | wx.TE_PROCESS_ENTER
-#    else:
-#      kwargs['style'] = wx.TE_PROCESS_ENTER
+    if kwargs.has_key('style'):
+      kwargs['style'] = kwargs['style'] | wx.TE_PROCESS_ENTER
+    else:
+      kwargs['style'] = wx.TE_PROCESS_ENTER
 
     TextCtrl.__init__(self, *args, **kwargs)
 
