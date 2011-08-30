@@ -94,7 +94,30 @@ class Slider(wx.Slider):
 
 class ToggleButton(wx.ToggleButton):
   def __init__(self, *args, **kwargs):
-    pass
+    if kwargs.has_key('convert_from'):
+      self._convert_from = kwargs['convert_from']
+      del kwargs['convert_from']
+    else:
+      self._convert_from = lambda x: x
+    if kwargs.has_key('convert_to'):
+      self._convert_to = kwargs['convert_to']
+      del kwargs['convert_to']
+    else:
+      self._convert_to = lambda x: x
+
+  def set_variable(self, variable):
+    self._variable = variable
+
+    if self._variable is None:
+      self.Unbind(wx.EVT_TOGGLEBUTTON, self)
+    else:
+      self.Bind(wx.EVT_TOGGLEBUTTON, self.on_toggle)
+      
+  def on_live_variable_event(self, evt):
+    self.SetValue(self._convert_to(evt.value))
+
+  def on_toggle(self, evt):
+    self._variable.set_value(self._convert_from(self.GetValue()), self)
+    
 
 # vim: set filetype=python shiftwidth=2 softtabstop=2 tabstop=8 expandtab: 
-
