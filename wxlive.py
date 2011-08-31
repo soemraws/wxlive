@@ -233,7 +233,7 @@ class Variable(object):
       setter_object = None # setter_object should still be informed of value change
     else:
       self._value = value
-    self.__post_update_event(setter_object)
+    self.notify_listeners(skip_listener=setter_object)
 
   def get_value(self, force = False):
     '''
@@ -284,10 +284,9 @@ class Variable(object):
     '''
     if self.fget is not None:
       value = self.type(self.fget())
-      if value != self._value:
-        self._time = time() - self.time_offset
-        self._value = value
-        self.__post_update_event()
+      self._time = time() - self.time_offset
+      self._value = value
+    self.notify_listeners()
 
   def add_listener(self, listener, eventfunc = None):
     '''
@@ -386,7 +385,7 @@ class Variable(object):
       value = 'now'
     self.set_time_offset(value)
 
-  def __post_update_event(self, skip_listener = None):
+  def notify_listeners(self, skip_listener = None):
     evt = VariableEvent(time = self._time, value = self._value,
         reply = self._reply)
     evt.SetId(self._id)
